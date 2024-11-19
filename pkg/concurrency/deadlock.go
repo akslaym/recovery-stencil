@@ -53,17 +53,24 @@ func removeHelper(list []Edge, i int) []Edge {
 
 // Return true if a cycle exists; false otherwise.
 func (g *WaitsForGraph) DetectCycle() (hasCycle bool) {
-	g.mtx.Lock()
-	defer g.mtx.Unlock()
-	res := false
-	if(len(g.edges) != 0) {
-		for _, edge := range g.edges {
-			seen := make(map[*Transaction]bool)
-			seen[edge.from] = true
-			res = dfs(g, edge.from, seen)
+	g.mtx.RLock()
+	defer g.mtx.RUnlock()
+	/* SOLUTION {{{ */
+	// Get all transactions in the graph, using a set to avoid duplicates
+	tSet := make(map[*Transaction]bool)
+	for _, e := range g.edges {
+		tSet[e.from] = true
+		tSet[e.to] = true
+	}
+
+	for k := range tSet {
+		if dfs(g, k, make(map[*Transaction]bool)) {
+			return true
 		}
 	}
-	return res
+
+	return false
+	/* SOLUTION }}} */
 }
 
 // depth-first search function to help detect cycles in a graph
