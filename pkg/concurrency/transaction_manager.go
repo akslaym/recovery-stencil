@@ -66,7 +66,47 @@ func (tm *TransactionManager) Begin(clientId uuid.UUID) error {
 // 6) Add resource to the transaction's resources
 // Hint: conflictingTransactions(), GetTransaction()
 func (tm *TransactionManager) Lock(clientId uuid.UUID, table database.Index, resourceKey int64, lType LockType) error {
-	panic("Not yet implemented!")
+	tm.mtx.RLock()
+	tx, found := tm.GetTransaction(clientId)
+	res := Resource{table.GetName(), resourceKey}
+	if(!found) {
+		tm.mtx.RUnlock()
+		return errors.New("Could not find transaction with client ID")
+	}
+	tm.mtx.RUnlock()
+	tx.mtx.Lock()
+	if existingLockType, hasLock := tx.lockedResources[res]; hasLock {
+		if existingLockType == lType || (existingLockType == W_LOCK && lType == R_LOCK) {
+			tx.mtx.Unlock()
+			return nil
+		} else if existingLockType == R_LOCK && lType == W_LOCK {
+			tx.mtx.Unlock()
+			return errors.New("Trying to upgrade lock type")
+		}
+	}
+	tx.mtx.Unlock()
+	for _, conflict := range tm.conflictingTransactions(res, lType) {
+		tm.waitsForGraph.AddEdge(tx, conflict)
+	}
+	if(tm.waitsForGraph.DetectCycle()) {
+		return errors.New("We have a cycle")
+	}
+	err := tm.resourceLockManager.Lock(res, lType)
+    if err != nil {
+        tx.mtx.Unlock()
+        return err
+    }
+
+	tx.mtx.Lock()
+    tx.lockedResources[res] = lType
+
+    for _, edge := range tm.waitsForGraph.edges {
+		if(edge.from == tx) {
+			tm.waitsForGraph.RemoveEdge(tx, edge.to)
+		}
+	}
+	tx.mtx.Unlock()
+	return nil
 }
 
 // Unlocks the requested resource.
@@ -74,7 +114,34 @@ func (tm *TransactionManager) Lock(clientId uuid.UUID, table database.Index, res
 // 2) Remove resource from the transaction's currently locked resources if it is valid.
 // 3) Unlock resource's mutex
 func (tm *TransactionManager) Unlock(clientId uuid.UUID, table database.Index, resourceKey int64, lType LockType) error {
-	panic("Not yet implemented!")
+	tm.mtx.RLock()
+	tx, found := tm.GetTransaction(clientId)
+	res := Resource{table.GetName(), resourceKey}
+	if(!found) {
+		tm.mtx.RUnlock()
+		return errors.New("Could not find transaction with client ID")
+	}
+	tm.mtx.RUnlock()
+	tx.mtx.Lock()
+
+	if existingLockType, hasLock := tx.lockedResources[res]; hasLock {
+        if existingLockType != lType {
+            tx.mtx.Unlock()
+            return errors.New("Locks not of same type")
+        }
+        delete(tx.lockedResources, res)
+    } else {
+        tx.mtx.Unlock()
+        return errors.New("Resource not in locked resources")
+    }
+
+	err := tm.resourceLockManager.Unlock(res, lType)
+    if err != nil {
+        tx.mtx.Unlock()
+        return err
+    }
+	tx.mtx.Unlock()
+	return nil
 }
 
 // Commits the given transaction and removes it from the running transactions list.

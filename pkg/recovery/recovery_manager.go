@@ -207,17 +207,53 @@ func (rm *RecoveryManager) undo(log editLog) error {
 // Recover carries out a full recovery to the most recent checkpoint according to
 // the write-ahead log. Intended to be used on startup after a crash.
 func (rm *RecoveryManager) Recover() error {
-	/*logs, checkpointIndex, err := rm.readLogs()
-	if(err != nil) {
-		return err
-	}
-	if(checkpointIndex != 0) {
-		activeTxns := logs[checkpointIndex].(checkpointLog)
-	} else {
+	logs, checkpointIndex, err := rm.readLogs()
+    if err != nil {
+        return err
+    }
 
+    activeTxns := make(map[uuid.UUID]bool)
+    if checkpoint, ok := logs[checkpointIndex].(checkpointLog); ok {
+		for _, id := range checkpoint.ids {
+			activeTxns[id] = true
+		}
 	}
-	*/
-	return nil
+
+    uncommittedLogs := make(map[uuid.UUID][]editLog)
+    for i := checkpointIndex + 1; i < len(logs); i++ {
+        switch log := logs[i].(type) {
+			case startLog:
+				activeTxns[log.id] = true
+			case commitLog:
+				delete(activeTxns, log.id)
+				delete(uncommittedLogs, log.id)
+			case editLog:
+				if err := rm.redo(log); err != nil {
+					return err
+				}
+				if activeTxns[log.id] {
+					uncommittedLogs[log.id] = append(uncommittedLogs[log.id], log)
+				}
+			case checkpointLog:
+			default:
+				return errors.New("Not any Log Type")
+        }
+    }
+	
+    for txID := range activeTxns {
+        logs := uncommittedLogs[txID]
+        for i := len(logs) - 1; i >= 0; i-- {
+            if err := rm.undo(logs[i]); err != nil {
+                return err
+            }
+        }
+        commit := commitLog{txID}
+        if err := rm.flushLog(commit); err != nil {
+            return err
+        }
+    }
+
+    return nil
 }
 
 // Rollback rolls back the current uncommitted transaction for a client.
