@@ -250,7 +250,6 @@ func (rm *RecoveryManager) Recover() error {
 					}
 			}
 			default:
-				return errors.New("not any Log Type")
 		}
 	}
 
