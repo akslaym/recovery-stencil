@@ -84,21 +84,29 @@ func (rm *RecoveryManager) Table(tblType string, tblName string) error {
 func (rm *RecoveryManager) Edit(clientId uuid.UUID, table database.Index, action action, key int64, oldval int64, newval int64) error {
 	rm.mtx.Lock()
 	defer rm.mtx.Unlock()
-	panic("Not implemented")
+	edit := editLog{clientId, table.GetName(), action, key, oldval, newval}
+	rm.flushLog(edit)
+	rm.txStack[clientId] = append(rm.txStack[clientId], edit)
+	return nil
 }
 
 // Start records the start of a transaction to the write-ahead log.
 func (rm *RecoveryManager) Start(clientId uuid.UUID) error {
 	rm.mtx.Lock()
 	defer rm.mtx.Unlock()
-	panic("Not implemented")
+	start := startLog{clientId}
+	rm.flushLog(start)
+	return nil
 }
 
 // Commit records the committing of a transaction to the write-ahead log.
 func (rm *RecoveryManager) Commit(clientId uuid.UUID) error {
 	rm.mtx.Lock()
 	defer rm.mtx.Unlock()
-	panic("Not implemented")
+	delete(rm.txStack, clientId)
+	commit := commitLog{clientId}
+	rm.flushLog(commit)
+	return nil
 }
 
 // Checkpoint flushes all pages to disk and creates a checkpoint to recover the database
@@ -107,7 +115,17 @@ func (rm *RecoveryManager) Commit(clientId uuid.UUID) error {
 func (rm *RecoveryManager) Checkpoint() error {
 	rm.mtx.Lock()
 	defer rm.mtx.Unlock()
-	panic("Not implemented")
+	for _, table := range(rm.db.GetTables()) {
+		table.GetPager().LockAllPages()
+		table.GetPager().FlushAllPages()
+		table.GetPager().UnlockAllPages()
+	}
+	ids := make([]uuid.UUID, 0)
+	for id, _ := range(rm.txStack) {
+		ids = append(ids, id)
+	}
+	checkpoint := checkpointLog{ids: ids}
+	rm.flushLog(checkpoint)
 	rm.delta() // Keep this line at the end that ensures checkpointing works correctly!
 	return nil
 }
