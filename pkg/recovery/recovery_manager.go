@@ -220,7 +220,6 @@ func (rm *RecoveryManager) Recover() error {
 		}
 	}
 
-    uncommittedLogs := make(map[uuid.UUID][]editLog)
     for i := checkpointIndex + 1; i < len(logs); i++ {
         switch log := logs[i].(type) {
 			case startLog:
@@ -228,14 +227,10 @@ func (rm *RecoveryManager) Recover() error {
 				rm.tm.Begin(log.id)
 			case commitLog:
 				delete(activeTxns, log.id)
-				delete(uncommittedLogs, log.id)
 				rm.tm.Commit(log.id)
 			case editLog:
 				if err := rm.redo(log); err != nil {
 					return err
-				}
-				if activeTxns[log.id] {
-					uncommittedLogs[log.id] = append(uncommittedLogs[log.id], log)
 				}
 			case tableLog:
 				if err := rm.redo(log); err != nil {
@@ -246,20 +241,27 @@ func (rm *RecoveryManager) Recover() error {
         }
     }
 	
+	for i := len(logs) - 1; i >= 0; i-- {
+		switch log := logs[i].(type) {
+			case editLog:
+				if(activeTxns[log.id]) {
+					if err := rm.undo(log); err != nil {
+						return err
+					}
+			}
+			default:
+				return errors.New("not any Log Type")
+		}
+	}
+
     for txID := range activeTxns {
-        logs := uncommittedLogs[txID]
-        for i := len(logs) - 1; i >= 0; i-- {
-            if err := rm.undo(logs[i]); err != nil {
-                return err
-            }
-        }
         commit := commitLog{txID}
         if err := rm.flushLog(commit); err != nil {
             return err
         }
 		rm.tm.Commit(txID)
+		rm.Commit(txID)
     }
-
     return nil
 }
 
