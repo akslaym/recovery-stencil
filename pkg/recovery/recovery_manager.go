@@ -213,7 +213,13 @@ func (rm *RecoveryManager) Recover() error {
 // Rollback rolls back the current uncommitted transaction for a client.
 // This is called when you abort a transaction.
 func (rm *RecoveryManager) Rollback(clientId uuid.UUID) error {
-	panic("Not implemented")
+	for _, item := range(rm.txStack[clientId]) {
+		rm.redo(item)
+	}
+	for i := len(rm.txStack[clientId])-1; i >= 0; i-- {
+		rm.undo(rm.txStack[clientId][i])
+	 }
+	 return nil
 }
 
 // Primes the database for recovery
