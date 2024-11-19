@@ -210,8 +210,13 @@ func (rm *RecoveryManager) Recover() error {
 	/*logs, checkpointIndex, err := rm.readLogs()
 	if(err != nil) {
 		return err
-	}*/
-	
+	}
+	if(checkpointIndex != 0) {
+		activeTxns := logs[checkpointIndex].(checkpointLog)
+	} else {
+
+	}
+	*/
 	return nil
 }
 
