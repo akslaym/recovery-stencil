@@ -216,6 +216,7 @@ func (rm *RecoveryManager) Recover() error {
     if checkpoint, ok := logs[checkpointIndex].(checkpointLog); ok {
 		for _, id := range checkpoint.ids {
 			activeTxns[id] = true
+			rm.tm.Begin(id)
 		}
 	}
 
@@ -224,9 +225,11 @@ func (rm *RecoveryManager) Recover() error {
         switch log := logs[i].(type) {
 			case startLog:
 				activeTxns[log.id] = true
+				rm.tm.Begin(log.id)
 			case commitLog:
 				delete(activeTxns, log.id)
 				delete(uncommittedLogs, log.id)
+				rm.tm.Commit(log.id)
 			case editLog:
 				if err := rm.redo(log); err != nil {
 					return err
@@ -234,9 +237,12 @@ func (rm *RecoveryManager) Recover() error {
 				if activeTxns[log.id] {
 					uncommittedLogs[log.id] = append(uncommittedLogs[log.id], log)
 				}
-			case checkpointLog:
+			case tableLog:
+				if err := rm.redo(log); err != nil {
+					return err
+				}
 			default:
-				return errors.New("Not any Log Type")
+				return errors.New("not any Log Type")
         }
     }
 	
@@ -251,6 +257,7 @@ func (rm *RecoveryManager) Recover() error {
         if err := rm.flushLog(commit); err != nil {
             return err
         }
+		rm.tm.Commit(txID)
     }
 
     return nil
