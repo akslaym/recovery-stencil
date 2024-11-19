@@ -121,7 +121,7 @@ func (rm *RecoveryManager) Checkpoint() error {
 		table.GetPager().UnlockAllPages()
 	}
 	ids := make([]uuid.UUID, 0)
-	for id, _ := range(rm.txStack) {
+	for id := range(rm.txStack) {
 		ids = append(ids, id)
 	}
 	checkpoint := checkpointLog{ids: ids}
@@ -227,7 +227,7 @@ func (rm *RecoveryManager) Recover() error {
 			rm.tm.Begin(id)
 		}
 	}
-
+	
     for i := checkpointIndex + 1; i < len(logs); i++ {
         switch log := logs[i].(type) {
 			case startLog:
@@ -252,7 +252,10 @@ func (rm *RecoveryManager) Recover() error {
 						return err
 					}
 			}
-			default:
+			case commitLog:
+				if(activeTxns[log.id]) {
+					delete(activeTxns, log.id)
+				}
 		}
 	}
 
@@ -270,9 +273,6 @@ func (rm *RecoveryManager) Recover() error {
 // Rollback rolls back the current uncommitted transaction for a client.
 // This is called when you abort a transaction.
 func (rm *RecoveryManager) Rollback(clientId uuid.UUID) error {
-	for _, item := range(rm.txStack[clientId]) {
-		rm.redo(item)
-	}
 	for i := len(rm.txStack[clientId])-1; i >= 0; i-- {
 		rm.undo(rm.txStack[clientId][i])
 	 }
