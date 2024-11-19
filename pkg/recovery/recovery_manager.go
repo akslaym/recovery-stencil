@@ -231,8 +231,8 @@ func (rm *RecoveryManager) Recover() error {
     for i := checkpointIndex + 1; i < len(logs); i++ {
         switch log := logs[i].(type) {
 			case startLog:
-				activeTxns[log.id] = true
 				rm.tm.Begin(log.id)
+				activeTxns[log.id] = true
 			case commitLog:
 				delete(activeTxns, log.id)
 				rm.tm.Commit(log.id)
@@ -252,9 +252,10 @@ func (rm *RecoveryManager) Recover() error {
 						return err
 					}
 			}
-			case commitLog:
+			case startLog:
 				if(activeTxns[log.id]) {
 					delete(activeTxns, log.id)
+					rm.tm.Commit(log.id)
 				}
 		}
 	}
