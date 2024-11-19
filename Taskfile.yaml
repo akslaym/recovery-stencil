@@ -26,8 +26,9 @@ tasks:
   clean:
     desc: Deletes previous build executables/artifacts
     cmds:
-      - rm -f dinodb dinodb_client dinodb_stress
-
+      - rm -f dinodb
+      - rm -f dinodb_client
+      - rm -f dinodb_stress
   
 
   test:
