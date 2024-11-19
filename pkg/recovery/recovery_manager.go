@@ -212,6 +212,14 @@ func (rm *RecoveryManager) Recover() error {
         return err
     }
 
+	for i := 0; i < len(logs); i++ {
+		switch log := logs[i].(type) {
+			case tableLog:
+				rm.redo(log)
+			default:
+		}
+	}
+
     activeTxns := make(map[uuid.UUID]bool)
     if checkpoint, ok := logs[checkpointIndex].(checkpointLog); ok {
 		for _, id := range checkpoint.ids {
@@ -232,12 +240,7 @@ func (rm *RecoveryManager) Recover() error {
 				if err := rm.redo(log); err != nil {
 					return err
 				}
-			case tableLog:
-				if err := rm.redo(log); err != nil {
-					return err
-				}
 			default:
-				return errors.New("not any Log Type")
         }
     }
 	
