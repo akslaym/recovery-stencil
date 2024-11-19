@@ -207,7 +207,12 @@ func (rm *RecoveryManager) undo(log editLog) error {
 // Recover carries out a full recovery to the most recent checkpoint according to
 // the write-ahead log. Intended to be used on startup after a crash.
 func (rm *RecoveryManager) Recover() error {
-	panic("Not implemented")
+	/*logs, checkpointIndex, err := rm.readLogs()
+	if(err != nil) {
+		return err
+	}*/
+	
+	return nil
 }
 
 // Rollback rolls back the current uncommitted transaction for a client.
@@ -219,6 +224,8 @@ func (rm *RecoveryManager) Rollback(clientId uuid.UUID) error {
 	for i := len(rm.txStack[clientId])-1; i >= 0; i-- {
 		rm.undo(rm.txStack[clientId][i])
 	 }
+	 rm.tm.Commit(clientId)
+	 rm.Commit(clientId)
 	 return nil
 }
 
