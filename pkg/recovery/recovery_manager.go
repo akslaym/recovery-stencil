@@ -256,18 +256,10 @@ func (rm *RecoveryManager) Recover() error {
 				if(activeTxns[log.id]) {
 					delete(activeTxns, log.id)
 					rm.tm.Commit(log.id)
+					rm.Commit(log.id)
 				}
 		}
 	}
-
-    for txID := range activeTxns {
-        commit := commitLog{txID}
-        if err := rm.flushLog(commit); err != nil {
-            return err
-        }
-		rm.tm.Commit(txID)
-		rm.Commit(txID)
-    }
     return nil
 }
 
